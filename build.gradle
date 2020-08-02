@@ -1,0 +1,278 @@
+import com.gradle.demo.ReleaseVersionListener
+
+plugins {
+    id 'org.springframework.boot' version '2.4.0-M1'
+    id 'io.spring.dependency-management' version '1.0.9.RELEASE'
+    id 'java'
+    id 'war'
+}
+
+group = 'com.gradle'
+version = '0.0.1-SNAPSHOT'
+sourceCompatibility = '11'
+
+repositories {
+    mavenCentral()
+    maven { url 'https://repo.spring.io/milestone' }
+}
+
+/*sourceSets{
+    main{
+        java {
+            srcDirs = ['src']
+        }
+    }
+    test{
+        java {
+            srcDirs = ['test']
+        }
+    }
+}
+
+buildDir = 'out'*/
+
+dependencies {
+    implementation 'org.springframework.boot:spring-boot-starter-webflux'
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testImplementation 'io.projectreactor:reactor-test'
+}
+
+test {
+    useJUnitPlatform()
+}
+
+task startSession {
+    doLast {
+        //chant()
+        println 'using ANT'
+    }
+}
+
+//gradle can use ANT
+/*def chant() {
+    //ant.echo('message: repeat after me')
+    ant.text(domessage, 'repeat after me')
+}*/
+
+task domessage {
+    doLast {
+        println 'ant message in Gradle'
+    }
+}
+
+//define task by a loop
+3.times {
+    println "do loop $it, defining task:yayGradle$it"
+    task "yayGradle$it" {
+        doLast {
+            println 'Gradle rocks'
+        }
+    }
+}
+
+//dependsOn is a method of 'task'
+yayGradle0.dependsOn startSession
+yayGradle2.dependsOn yayGradle1, yayGradle0
+task groupTherapy(dependsOn: yayGradle2)
+
+project.ext.myProp = 'myValue'
+ext {
+    someOtherProp = 123
+}
+
+assert myProp == 'myValue'
+println "project.someOtherProp: $project.someOtherProp"
+
+task printVersion {
+    doFirst {
+        println "1 preparing print version"
+    }
+
+    doLast {
+        println "2 Version : $version"
+    }
+}
+
+printVersion.doLast {
+    println "3 using Logger print version"
+    logger.quiet("Version : $version")
+}
+
+task printVersionWithParam(group: 'versioning', description: 'prints version') {
+    doFirst {
+        println "1.1 preparing print version"
+    }
+
+    doLast {
+        println "1.2 Version : $version"
+    }
+}
+
+task printVersionUsingSetter() {
+
+    group = 'versioning'
+    description = 'prints version'
+
+    doLast {
+        println "1.2 Version : $version"
+    }
+}
+
+task first {
+    doLast {
+        println "first__________________"
+    }
+}
+
+task second {
+    doLast {
+        println "second_________"
+    }
+}
+
+task third(dependsOn: [first, second]) {
+    doLast {
+        println "third____"
+    }
+}
+
+task fourth {
+    doLast {
+        println "fourth__"
+    }
+}
+
+fourth.dependsOn {
+    'third'
+}
+
+def myTag = new MyTag('aaa', 'bbb', false);
+
+class MyTag {
+    String prefix;
+    String postfix;
+    Boolean release;
+
+    MyTag(String prefix, String postfix, Boolean release) {
+        this.prefix = prefix
+        this.postfix = postfix
+        this.release = release
+    }
+
+    @Override
+    String toString() {
+        return "MyTag{" +
+                "prefix='" + prefix + '\'' +
+                ", postfix='" + postfix + '\'' +
+                ", release=" + release +
+                '}';
+    }
+}
+
+
+task printTag {
+    doLast {
+        println "my tag is : $myTag"
+    }
+}
+
+ext.myTagFile = file('mytag.properies')
+ext {
+    myNewTag = readMyTag()
+}
+
+task loadMyTag {
+    println "$project.ext.myNewTag"
+}
+
+MyTag readMyTag() {
+
+    logger.quiet("read my tag form file!")
+
+    if (!myTagFile.exists()) {
+        throw new GradleException("mytag.properies not found!")
+    }
+
+    Properties properties = new Properties()
+    myTagFile.withInputStream {
+        stream -> properties.load(stream)
+    }
+
+    return new MyTag(properties.prefix.toString(), properties.postfix.toString(), false)
+}
+
+task makeReleaseVersion(type: ReleaseVersionTask) {
+    release = project.ext.myNewTag.release
+    destFile = myTagFile
+}
+
+class ReleaseVersionTask extends DefaultTask {
+    @Input
+    Boolean release
+    @OutputFile
+    File destFile
+
+    ReleaseVersionTask() {
+        this.group = "versioning"
+        this.description = "Release Version Class"
+    }
+
+    @TaskAction
+    void start() {
+        println "do task action ... ..."
+
+        project.ext.myNewTag.release = true;
+        Properties properties = new Properties()
+        project.ext.myTagFile.withInputStream {
+            stream -> properties.load(stream)
+        }
+        println properties.prefix.toString()
+
+        properties.setProperty('prefix', 'releaseVersion-prefix')
+        properties.setProperty('postfix', 'releaseVersion-postfix')
+        properties.setProperty('release', 'true')
+
+        println properties.prefix.toString()
+
+        project.ext.myTagFile.withWriter {
+            properties.store(it, null)
+        }
+    }
+}
+
+
+task createDistribution(type: Zip, dependsOn: makeReleaseVersion) {
+    //use outputs of war.outputs.files as outputs
+    from war.outputs.files
+
+    //put all source into 'src' folder
+    from(sourceSets*.allSource) {
+        into 'src'
+    }
+
+    from(rootDir) {
+        include project.ext.myTagFile.name
+    }
+}
+
+task backupReleaseDistribution(type: Copy) {
+    //use outputs of createDistribution.outputs.files as outputs
+    from createDistribution.outputs.files
+    into "$buildDir/backup"
+}
+
+task release(dependsOn: backupReleaseDistribution) {
+    doLast {
+        logger.quiet 'releasing the project...'
+    }
+}
+
+tasks.addRule("do when calling release") {
+    String taskName ->
+        if (taskName.startsWith('release')) {
+            logger.quiet 'applying rule to the task'
+        }
+}
+
+def releaseVersionListener = new ReleaseVersionListener()
+gradle.taskGraph.addTaskExecutionGraphListener(releaseVersionListener)

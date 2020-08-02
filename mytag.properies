@@ -1,0 +1,4 @@
+#Sun Aug 02 12:33:26 EEST 2020
+release=true
+prefix=releaseVersion-prefix
+postfix=releaseVersion-postfix
