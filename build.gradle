@@ -276,3 +276,20 @@ tasks.addRule("do when calling release") {
 
 def releaseVersionListener = new ReleaseVersionListener()
 gradle.taskGraph.addTaskExecutionGraphListener(releaseVersionListener)
+
+
+task myBeforeBuildTask {
+    doLast {
+        println "here's a Before Build task"
+    }
+}
+
+task myAfterBuildTask {
+    doLast {
+        println "here's the After Build task"
+    }
+}
+
+build.dependsOn myTask
+
+build.finalizedBy(myLastTask)
